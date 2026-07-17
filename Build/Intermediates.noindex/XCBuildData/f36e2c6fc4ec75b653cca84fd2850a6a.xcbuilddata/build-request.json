@@ -1,0 +1,59 @@
+{
+  "buildCommand" : {
+    "command" : "build",
+    "skipDependencies" : false,
+    "style" : "buildAndRun"
+  },
+  "configuredTargets" : [
+    {
+      "guid" : "8499dfcd86a31c37a3ed22bc306bf779249ccb976885405b654c090b7b004ed0"
+    }
+  ],
+  "containerPath" : "/Users/pzoli/development/xcode/MacSMSGateway/MacSMSGateway.xcodeproj",
+  "continueBuildingAfterErrors" : false,
+  "dependencyScope" : "workspace",
+  "enableIndexBuildArena" : false,
+  "hideShellScriptEnvironment" : false,
+  "parameters" : {
+    "action" : "build",
+    "activeArchitecture" : "arm64",
+    "activeRunDestination" : {
+      "disableOnlyActiveArch" : false,
+      "hostTargetedPlatform" : null,
+      "platform" : "macosx",
+      "sdk" : "macosx26.5",
+      "sdkVariant" : "macos",
+      "supportedArchitectures" : [
+        "arm64e",
+        "arm64",
+        "x86_64"
+      ],
+      "targetArchitecture" : "arm64"
+    },
+    "arenaInfo" : {
+      "buildIntermediatesPath" : "/Users/pzoli/development/xcode/MacSMSGateway/Build/Intermediates.noindex",
+      "buildProductsPath" : "/Users/pzoli/development/xcode/MacSMSGateway/Build/Products",
+      "derivedDataPath" : "/Users/pzoli/Library/Developer/Xcode/DerivedData",
+      "indexDataStoreFolderPath" : "/Users/pzoli/Library/Developer/Xcode/DerivedData/MacSMSGateway-gweprhfbptmnlcaedwisvjtljxds/Index.noindex/DataStore",
+      "indexEnableDataStore" : true,
+      "indexPCHPath" : "/Users/pzoli/Library/Developer/Xcode/DerivedData/MacSMSGateway-gweprhfbptmnlcaedwisvjtljxds/Index.noindex/PrecompiledHeaders",
+      "pchPath" : "/Users/pzoli/development/xcode/MacSMSGateway/Build/Intermediates.noindex/PrecompiledHeaders"
+    },
+    "configurationName" : "Debug",
+    "overrides" : {
+      "synthesized" : {
+        "table" : {
+          "ENABLE_PREVIEWS" : "NO",
+          "ENABLE_XOJIT_PREVIEWS" : "YES",
+          "ONLY_ACTIVE_ARCH" : "YES"
+        }
+      }
+    }
+  },
+  "schemeCommand" : "launch",
+  "showNonLoggedProgress" : true,
+  "useDryRun" : false,
+  "useImplicitDependencies" : true,
+  "useLegacyBuildLocations" : false,
+  "useParallelTargets" : true
+}

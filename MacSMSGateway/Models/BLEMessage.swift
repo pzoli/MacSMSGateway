@@ -7,34 +7,45 @@
 
 import Foundation
 
-struct BLEMessage: Codable {
-
-    let id: Int?
-    let type: String
-    let action: String?
-    let status: String?
-    let payload: Payload?
-    let error: BLEError?
+enum MessageType: String, Codable {
+    case request
+    case response
+    case event
 }
 
-struct Payload: Codable {
-
-    let phone: String?
-    let text: String?
-    let from: String?
+enum Status: String, Codable {
+    case ok
+    case error
 }
 
 struct BLEError: Codable {
-
     let code: String
     let message: String
 }
 
-struct SMSMessage:
-    Identifiable {
+struct BLEMessage: Codable, Identifiable {
 
-    let id = UUID()
+    var uuid = UUID()
 
-    var sender:String
-    var text:String
+    let id: Int?
+
+    let type: MessageType
+
+    let action: String?
+
+    let status: Status?
+
+    let payload: Payload?
+
+    let error: BLEError?
+
+    enum CodingKeys: String, CodingKey {
+
+        case id
+        case type
+        case action
+        case status
+        case payload
+        case error
+    }
 }
