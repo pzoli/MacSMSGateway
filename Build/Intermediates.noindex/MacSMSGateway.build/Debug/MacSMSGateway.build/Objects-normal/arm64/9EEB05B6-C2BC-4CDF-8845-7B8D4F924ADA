@@ -1,8 +1,0 @@
-{
-  "" : {
-    "pch" : "/Users/pzoli/development/xcode/MacSMSGateway/Build/Intermediates.noindex/MacSMSGateway.build/Debug/MacSMSGateway.build/Objects-normal/arm64/MacSMSGateway-primary-Bridging-header.pch"
-  },
-  "/Users/pzoli/development/xcode/MacSMSGateway/MacSMSGateway/ContentView.swift" : {
-    "object" : "/Users/pzoli/development/xcode/MacSMSGateway/Build/Intermediates.noindex/MacSMSGateway.build/Debug/MacSMSGateway.build/Objects-normal/arm64/ContentView.__XCPREVIEW_THUNKSUFFIX__.preview-thunk.o"
-  }
-}
