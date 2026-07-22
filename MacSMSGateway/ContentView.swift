@@ -7,96 +7,142 @@
 
 import SwiftUI
 
-
-struct ContentView:
-View {
-
-
-    @StateObject
-    var ble =
-    BLEManager()
-
-
-
-    @State var phone = ""
-
-    @State var text = ""
-
-
+struct ContentView: View {
+    @StateObject private var bleManager = BLEManager()
+    
+    @State private var selectedTab = 0
+    @State private var recipientNumber: String = ""
+    @State private var smsBody: String = ""
 
     var body: some View {
-
-
-        VStack(
-            spacing:20
-        ){
-
-
-            Text(
-                ble.status
-            )
-            .font(.headline)
-
-
-
-            Button(
-                "Android keresése"
-            ){
-
-                ble.connect()
-
-            }
-
-
-
-            Divider()
-
-
-
-            TextField(
-                "Telefonszám",
-                text:$phone
-            )
-
-
-
-            TextField(
-                "Üzenet",
-                text:$text
-            )
-
-
-
-            Button(
-                "SMS küldése"
-            ){
-
-                ble.sendSMS(
-                    phone:phone,
-                    text:text
-                )
-
-            }
-
-
-
-            Divider()
-
-
-            List(ble.messages, id: \.id) { message in
-
-                VStack(alignment: .leading) {
-
-                    Text(message.payload?.from ?? "")
-
-                    Text(message.payload?.text ?? "")
+        VStack(spacing: 0) {
+            // Fejléc / Állapot
+            HStack {
+                Circle()
+                    .fill(bleManager.isConnected ? Color.green : Color.red)
+                    .frame(width: 10, height: 10)
+                Text(bleManager.statusMessage)
+                    .font(.subheadline)
+                Spacer()
+                if bleManager.isConnected {
+                    Button("Szinkronizálás") {
+                        bleManager.requestSyncContacts()
+                    }
                 }
             }
+            .padding()
+            .background(Color(NSColor.windowBackgroundColor))
+            
+            Divider()
+
+            // Aktív hívás banner (ha van folyamatban lévő hívás)
+            if bleManager.currentCallStatus != .idle {
+                HStack {
+                    VStack(alignment: .leading) {
+                        Text("HÍVÁS: \(bleManager.currentCallStatus.rawValue)")
+                            .font(.caption).bold()
+                        Text(bleManager.currentCallNumber ?? "Ismeretlen szám")
+                            .font(.title3)
+                    }
+                    Spacer()
+                    if bleManager.currentCallStatus == .ringing {
+                        Button("Fogadás") {
+                            bleManager.answerCall()
+                        }
+                        .buttonStyle(.borderedProminent)
+                        .tint(.green)
+                    }
+                    Button("Elutasítás / Bontás") {
+                        bleManager.rejectOrHangupCall()
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .tint(.red)
+                }
+                .padding()
+                .background(Color.orange.opacity(0.2))
+            }
+
+            // Tab Nézet
+            TabView(selection: $selectedTab) {
+                // MARK: Kontaktok Tab
+                VStack {
+                    
+                    List(bleManager.contacts, id: \.id) { contact in
+                        HStack {
+                            VStack(alignment: .leading) {
+                                Text(contact.name).font(.headline)
+                                Text(contact.numbers[0]).font(.subheadline).foregroundColor(.gray)
+                            }
+                            Spacer()
+                            Button(action: {
+                                recipientNumber = contact.numbers[0]
+                                bleManager.makeCall(to: contact.numbers[0])
+                            }) {
+                                Image(systemName: "phone.fill")
+                            }
+                            Button(action: {
+                                recipientNumber = contact.numbers[0]
+                                selectedTab = 1
+                            }) {
+                                Image(systemName: "message.fill")
+                            }
+                        }
+                    }
+                    
+                }
+                .tabItem {
+                    Label("Kontaktok", systemImage: "person.crop.circle")
+                }
+                .tag(0)
+
+                // MARK: SMS Küldés Tab
+                VStack(spacing: 15) {
+                    TextField("Címzett telefonszáma", text: $recipientNumber)
+                        .textFieldStyle(RoundedBorderTextFieldStyle())
+                    
+                    TextEditor(text: $smsBody)
+                        .border(Color.gray.opacity(0.3))
+                        .frame(maxHeight: .infinity)
+                    
+                    HStack {
+                        Spacer()
+                        Button("SMS Küldése") {
+                            // JAVÍTVA: sendSms helyett sendSMS (nagybetűs SMS)
+                            bleManager.sendSMS(to: recipientNumber, body: smsBody)
+                            smsBody = ""
+                        }
+                        .disabled(!bleManager.isConnected || recipientNumber.isEmpty || smsBody.isEmpty)
+                        .buttonStyle(.borderedProminent)
+                    }
+                }
+                .padding()
+                .tabItem {
+                    Label("SMS Küldés", systemImage: "paperplane")
+                }
+                .tag(1)
+
+                // MARK: Bejövő SMS-ek Tab
+                VStack {
+                    List(bleManager.incomingSmsList, id: \.id) { sms in
+                        VStack(alignment: .leading, spacing: 5) {
+                            HStack {
+                                Text(sms.from).bold()
+                                Spacer()
+                                Text(Date(), style: .time)
+                                    .font(.caption).foregroundColor(.gray)
+                            }
+                            Text(sms.text)
+                        }
+                    }
+                }
+                .tabItem {
+                    Label("Bejövő SMS", systemImage: "tray")
+                }
+                .tag(2)
+            }
+            .padding(5)
         }
-        .padding()
-        .frame(
-            width:400,
-            height:500
-        )
+        .frame(minWidth: 500, minHeight: 400)
     }
 }
+

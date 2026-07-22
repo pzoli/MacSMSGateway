@@ -7,45 +7,39 @@
 
 import Foundation
 
-enum MessageType: String, Codable {
+public enum MessageType: String, Codable {
     case request
     case response
     case event
 }
 
-enum Status: String, Codable {
+public enum Status: String, Codable {
     case ok
     case error
 }
 
-struct BLEError: Codable {
+public struct BLEError: Codable {
     let code: String
     let message: String
 }
 
-struct BLEMessage: Codable, Identifiable {
+public struct BLEMessage<T: Codable>: Codable {
+    public let id: Int64
+    public let type: MessageType
+    public let action: String
+    public let payload: T
+    public let status: Status?
+    public let error: BLEError?
 
-    var uuid = UUID()
-
-    let id: Int?
-
-    let type: MessageType
-
-    let action: String?
-
-    let status: Status?
-
-    let payload: Payload?
-
-    let error: BLEError?
-
-    enum CodingKeys: String, CodingKey {
-
-        case id
-        case type
-        case action
-        case status
-        case payload
-        case error
+    public init(id: Int64 = Int64(Date().timeIntervalSince1970 * 1000),
+                type: MessageType,
+                action: String,
+                payload: T) {
+        self.id = id
+        self.type = type
+        self.action = action
+        self.payload = payload
+        self.status = nil
+        self.error = nil
     }
 }

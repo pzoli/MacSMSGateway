@@ -1,304 +1,273 @@
-//
-//  BLEManager.swift
-//  MacSMSGateway
-//
-//  Created by Papp Zoltán on 2026. 07. 16..
-//
-
 import Foundation
 import CoreBluetooth
-internal import Combine
+import Combine
 
-
-class BLEManager:
-NSObject,
-ObservableObject {
-
-    private let framer = BLEFramer()
+public class BLEManager: NSObject, ObservableObject, CBCentralManagerDelegate, CBPeripheralDelegate {
+    @Published public var isConnected = false
+    @Published public var statusMessage = "Lecsatlakozva"
     
-    private var central:
-    CBCentralManager!
-
-
-    private var phone:
-    CBPeripheral?
-
-
-    private var command:
-    CBCharacteristic?
-
-
-    private var event:
-    CBCharacteristic?
-
-
-
-    @Published var status =
-    "Nincs kapcsolat"
-
-
-    @Published var messages:
-    [BLEMessage] = []
-
-
-
-    override init(){
-
+    // UI Adatmodellek
+    @Published public var contacts: [Contact] = []
+    @Published public var currentCallStatus: CallStatus = .idle
+    @Published public var currentCallNumber: String? = nil
+    @Published public var incomingSmsList: [SmsReceivedPayload] = []
+    
+    private var centralManager: CBCentralManager!
+    private var peripheral: CBPeripheral?
+    private var rxCharacteristic: CBCharacteristic?
+    private var txCharacteristic: CBCharacteristic?
+    
+    private var framer = BLEFramer()
+    
+    override public init() {
         super.init()
-
-        central =
-        CBCentralManager(
-            delegate:self,
-            queue:nil
-        )
+        centralManager = CBCentralManager(delegate: self, queue: nil)
     }
-
-
-
-    func connect(){
-
-        print("Connect pressed")
-
-            print("State = \(central.state.rawValue)")
-
-            guard central.state == .poweredOn else {
-                status = "Bluetooth nem áll készen"
-                return
-            }
-
-            status = "Keresés..."
-        //*
-            central.scanForPeripherals(
-                withServices: [BLEUUID.service],
-                options: [
-                    CBCentralManagerScanOptionAllowDuplicatesKey: false
-                ]
-            )
-        //*/
-        /*
-        central.scanForPeripherals(
-            withServices: nil,
-            options: nil
-        )
-         */
+    
+    public func startScanning() {
+        guard centralManager.state == .poweredOn else { return }
+        statusMessage = "Keresés..."
+        centralManager.scanForPeripherals(withServices: nil, options: [CBCentralManagerScanOptionAllowDuplicatesKey: false])
     }
-
-
-
-    func sendSMS(
-        phone:String,
-        text:String
-    ){
-
-        guard let command else {
-            return
+    public func disconnect() {
+        if let peripheral = peripheral {
+            centralManager.cancelPeripheralConnection(peripheral)
         }
-        let message =
-            BLEProtocol.sendSMS(
-
-                id: nextId(),
-
-                phone: phone,
-
-                text: text
-            )
-        
+    }
+    
+    // MARK: - Parancsküldő Funkciók (Swing-client kompatibilis)
+    
+    /// Kontaktok letöltésének kérése BLE-n keresztül
+    public func requestSyncContacts() {
         do {
-            let data = try BLECodec.encode(message)
-            self.phone?.writeValue(
-                data,
-                for: command,
-                type: .withResponse
-            )
+            let rawMessage = BLEProtocol.makeSyncContactsMessage()
+            let bleMessage = BLEMessage<EmptyPayload>(type: rawMessage.type,action: rawMessage.action, payload: rawMessage.payload)
+            let encodedData = try BLECodec.encode(bleMessage)
+            send(data: encodedData)
         } catch {
-            print("Failed to encode BLE message: \(error)")
-            status = "Üzenet kódolási hiba"
-            return
+            print("Hiba a csomag kódolása/küldése során: \(error)")
+        }
+    }
+
+    // SMS küldése
+    public func sendSMS(to number: String, body: String) {
+        do {
+            let rawMessage = BLEProtocol.makeSendSmsMessage(to: number, message: body)
+            let bleMessage = BLEMessage<SendSmsPayload>(type: rawMessage.type, action: rawMessage.action, payload: rawMessage.payload)
+            let encodedData = try BLECodec.encode(bleMessage)
+            send(data: encodedData)
+        } catch {
+            print("Hiba a csomag kódolása/küldése során: \(error)")
+        }
+    }
+
+    // Hívás indítása/kezelése
+    public func sendCallAction(action: CallAction, phoneNumber: String) {
+        do {
+            let rawMessage = BLEProtocol.makeDialCallMessage(phoneNumber: phoneNumber)
+            let bleMessage = BLEMessage<SendSmsPayload>(type: rawMessage.type,action: rawMessage.action, payload: rawMessage.payload)
+            let encodedData = try BLECodec.encode(bleMessage)
+            send(data: encodedData)
+        } catch {
+            print("Hiba a csomag kódolása/küldése során: \(error)")
         }
     }
     
-    private var requestId = 0
-
-    private func nextId() -> Int {
-
-        requestId += 1
-
-        return requestId
-    }
-}
-
-extension BLEManager: CBCentralManagerDelegate {
-
-    func centralManagerDidUpdateState(_ central: CBCentralManager) {
-
-        print("Bluetooth state: \(central.state.rawValue)")
-
-        switch central.state {
-
-        case .poweredOn:
-            status = "Bluetooth OK"
-
-        case .poweredOff:
-            status = "Bluetooth kikapcsolva"
-
-        case .unauthorized:
-            status = "Nincs Bluetooth jogosultság"
-
-        case .unsupported:
-            status = "Bluetooth nem támogatott"
-
-        default:
-            status = "Bluetooth inicializálás..."
+    /// Hívás kezdeményezése
+    public func makeCall(to number: String) {
+        do {
+            let rawMessage = BLEProtocol.makeDialCallMessage(phoneNumber: number)
+            let bleMessage = BLEMessage<SendSmsPayload>(type: rawMessage.type, action: rawMessage.action, payload: rawMessage.payload)
+            let encodedData = try BLECodec.encode(bleMessage)
+            send(data: encodedData)
+        } catch {
+            print("Hiba a csomag kódolása/küldése során: \(error)")
         }
-    }
-
-    func centralManager(
-        _ central: CBCentralManager,
-        didDiscover peripheral: CBPeripheral,
-        advertisementData: [String : Any],
-        rssi RSSI: NSNumber
-    ) {
-
-        print("Found: \(peripheral.name ?? "Unknown")")
-
-        phone = peripheral
-
-        phone?.delegate = self
-
-        central.stopScan()
-
-        status = "Csatlakozás..."
-
-        central.connect(peripheral)
-    }
-
-    func centralManager(
-        _ central: CBCentralManager,
-        didConnect peripheral: CBPeripheral
-    ) {
-
-        status = "Kapcsolódva"
-
-        peripheral.discoverServices([
-            BLEUUID.service
-        ])
-    }
-}
-
-extension BLEManager: CBPeripheralDelegate {
-
-    func peripheral(
-        _ peripheral: CBPeripheral,
-        didDiscoverServices error: Error?
-    ) {
-
-        guard let service = peripheral.services?.first else {
-            return
-        }
-
-        peripheral.discoverCharacteristics(
-            nil,
-            for: service
-        )
-    }
-
-    func peripheral(
-        _ peripheral: CBPeripheral,
-        didDiscoverCharacteristicsFor service: CBService,
-        error: Error?
-    ) {
-
-        for characteristic in service.characteristics ?? [] {
-
-            if characteristic.uuid == BLEUUID.command {
-                command = characteristic
-            }
-
-            if characteristic.uuid == BLEUUID.event {
-
-                event = characteristic
-
-                peripheral.setNotifyValue(
-                    true,
-                    for: characteristic
-                )
-            }
-        }
-    }
-
-    func peripheral(
-        _ peripheral: CBPeripheral,
-        didUpdateValueFor characteristic: CBCharacteristic,
-        error: Error?
-    ) {
-        guard let data = characteristic.value else {
-                return
-            }
-
-            let packets = framer.append(data)
-
-            for packet in packets {
-
-                do {
-
-                    let message =
-                        try BLECodec.decode(packet)
-
-                    process(message)
-
-                } catch {
-
-                    print("BLE decode error: \(error)")
-                }
-            }
     }
     
-    private func process(
-        _ message: BLEMessage
-    ) {
-
+    /// Bejövő hívás fogadása
+    public func answerCall() {
+        do {
+            guard let rawMessage = BLEProtocol.makeCallControlMessage(action: .answer) else { return }
+            let bleMessage = BLEMessage<EmptyPayload>(type: rawMessage.type,action: rawMessage.action, payload: rawMessage.payload)
+            let encodedData = try BLECodec.encode(bleMessage)
+            send(data: encodedData)
+        } catch {
+            print("Hiba a csomag kódolása/küldése során: \(error)")
+        }
+    }
+    
+    /// Hívás elutasítása / Bontása
+    public func rejectOrHangupCall() {
+        do {
+            guard let rawMessage = BLEProtocol.makeCallControlMessage(action: .reject) else { return }
+            let bleMessage = BLEMessage<EmptyPayload>(type: rawMessage.type, action: rawMessage.action, payload: rawMessage.payload)
+            let encodedData = try BLECodec.encode(bleMessage)
+            send(data: encodedData)
+        } catch {
+            print("Hiba a csomag kódolása/küldése során: \(error)")
+        }
+    }
+    
+    
+    private func send(data: Data) {
+        guard isConnected, let tx = txCharacteristic, let peripheral = peripheral else { return }
+        let frames = framer.frame(data)
+        let writeType: CBCharacteristicWriteType = tx.properties.contains(.writeWithoutResponse) ? .withoutResponse : .withResponse
+        for frame in frames {
+            peripheral.writeValue(frame, for: tx, type: writeType)
+        }
+    }
+    
+    // MARK: - CBCentralManagerDelegate
+    public func centralManagerDidUpdateState(_ central: CBCentralManager) {
+        if central.state == .poweredOn {
+            startScanning()
+        } else {
+            statusMessage = "Bluetooth kikapcsolva"
+        }
+    }
+    
+    public func centralManager(_ central: CBCentralManager, didDiscover peripheral: CBPeripheral, advertisementData: [String : Any], rssi RSSI: NSNumber) {
+        // Csak a releváns nevű eszközökre csatlakozzunk (pl. Android Gateway, vagy tesztelje név szűrés nélkül)
+        if let name = peripheral.name, name.contains("SMS") || name.contains("Gateway") || name.contains("Android") {
+            self.peripheral = peripheral
+            self.peripheral?.delegate = self
+            centralManager.stopScan()
+            statusMessage = "Csatlakozás: \(name)..."
+            centralManager.connect(peripheral, options: nil)
+        } else if peripheral.name != nil {
+            // Vagy ha tesztelni szeretné szűrés nélkül az első talált névvel rendelkező eszközre:
+            print("Talált eszköz: \(peripheral.name ?? "Névtelen") (\(peripheral.identifier))")
+        }
+    }
+    
+    public func centralManager(_ central: CBCentralManager, didConnect peripheral: CBPeripheral) {
+        statusMessage = "Szolgáltatások feltérképezése..."
+        peripheral.discoverServices([BLEUUID.serviceUUID])
+    }
+    
+    public func centralManager(_ central: CBCentralManager, didDisconnectPeripheral peripheral: CBPeripheral, error: Error?) {
         DispatchQueue.main.async {
-
-            switch message.type {
-
-            case .event:
-
-                switch message.action {
-
-                case "sms_received":
-
-                    self.messages.append(message)
-
-                case "sms_sent":
-
-                    print("SMS elküldve")
-
-                default:
-
-                    print("Unknown event: \(message.action ?? "")")
+            self.isConnected = false
+            self.statusMessage = "Lecsatlakozva. Újracsatlakozás..."
+            self.startScanning()
+        }
+    }
+    
+    // MARK: - CBPeripheralDelegate
+    public func peripheral(_ peripheral: CBPeripheral, didDiscoverServices error: Error?) {
+        guard let services = peripheral.services else { return }
+        for service in services where service.uuid == BLEUUID.serviceUUID {
+            peripheral.discoverCharacteristics([BLEUUID.rxUUID, BLEUUID.txUUID], for: service)
+        }
+    }
+    
+    public func peripheral(_ peripheral: CBPeripheral, didDiscoverCharacteristicsFor service: CBService, error: Error?) {
+        guard let characteristics = service.characteristics else { return }
+        for characteristic in characteristics {
+            if characteristic.uuid == BLEUUID.rxUUID {
+                self.rxCharacteristic = characteristic
+                peripheral.setNotifyValue(true, for: characteristic)
+            } else if characteristic.uuid == BLEUUID.txUUID {
+                self.txCharacteristic = characteristic
+            }
+        }
+        
+        DispatchQueue.main.async {
+            self.isConnected = true
+            self.statusMessage = "Csatlakoztatva: \(peripheral.name ?? "Ezköz")"
+            self.requestSyncContacts()
+        }
+    }
+    
+    public func peripheral(_ peripheral: CBPeripheral, didUpdateValueFor characteristic: CBCharacteristic, error: Error?) {
+        guard let data = characteristic.value else { return }
+        
+        let completedMessages = framer.append(data)
+        for messageData in completedMessages {
+            do {
+                if let msg = String(data: messageData, encoding: .utf8) {
+                    print(msg)
+                } else {
+                    print("Received non-UTF8 message data (\(messageData.count) bytes)")
                 }
-
-            case .response:
-
-                switch message.status {
-
-                case .ok:
-
-                    print("OK response")
-
-                case .error:
-
-                    print(message.error?.message ?? "Unknown error")
-
-                case nil:
-
-                    break
+                let message = try BLECodec.decodeMessage(messageData)
+                handleIncomingMessage(message)
+            } catch {
+                // Fallback: ha a BLECodec a payload-ot Stringnek várja, de objektum érkezik, próbáljuk kézzel kinyerni
+                print("Hiba a dekódolás során: \(error). Fallback JSON feldolgozás...")
+                do {
+                    let jsonObject = try JSONSerialization.jsonObject(with: messageData, options: [])
+                    guard let dict = jsonObject as? [String: Any] else {
+                        print("Fallback: nem dictionary az üzenet gyökere")
+                        continue
+                    }
+                    guard let action = dict["action"] as? String else {
+                        print("Fallback: hiányzik az action mező vagy nem String")
+                        continue
+                    }
+                    let type = dict["type"] as? String
+                    var payloadData = Data()
+                    if let payloadObject = dict["payload"] {
+                        if JSONSerialization.isValidJSONObject(payloadObject) {
+                            payloadData = try JSONSerialization.data(withJSONObject: payloadObject, options: [])
+                        } else if let payloadString = payloadObject as? String, let data = payloadString.data(using: .utf8) {
+                            payloadData = data
+                        } else {
+                            print("Fallback: payload nem konvertálható Data-vá")
+                            continue
+                        }
+                    }
+                    // Építsünk egy BLEMessage<Data>-t kézzel
+                    let resolvedType: MessageType = {
+                        if let typeStr = type, let mt = MessageType(rawValue: typeStr) {
+                            return mt
+                        } else {
+                            // Ha a type hiányzik vagy ismeretlen, essen vissza egy alapértelmezett értékre
+                            return .response
+                        }
+                    }()
+                    let reconstructed = BLEMessage<Data>(type: resolvedType, action: action, payload: payloadData)
+                    handleIncomingMessage(reconstructed)
+                } catch {
+                    print("Fallback feldolgozás is hibázott: \(error)")
                 }
-
-            case .request:
-
-                print("Unexpected request from Android")
+            }
+        }
+    }
+    
+    // MARK: - Érkező üzenetek feldolgozása
+    private func handleIncomingMessage(_ message: BLEMessage<Data>) {
+        let action = message.action
+        DispatchQueue.main.async {
+            switch action {
+            case "contacts_list":
+                if let payload = try? JSONDecoder().decode(ContactListPayload.self, from: message.payload) {
+                    self.contacts = payload.contacts
+                }
+                
+            case "make_call", "call_status":
+                if let payload = try? JSONDecoder().decode(CallStatusPayload.self, from: message.payload) {
+                    self.currentCallStatus = payload.status
+                    self.currentCallNumber = payload.phoneNumber
+                }
+                
+            case "send_sms", "sms_received":
+                if let payload = try? JSONDecoder().decode(SmsReceivedPayload.self, from: message.payload) {
+                    self.incomingSmsList.insert(payload, at: 0)
+                }
+                
+            case "STATUS":
+                print("Status feedback: \(message.payload)")
+                
+            case "ERROR":
+                print("Error feedback: \(message.payload)")
+                
+            default:
+                break
             }
         }
     }
 }
+

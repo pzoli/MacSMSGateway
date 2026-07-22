@@ -1,10 +1,3 @@
-//
-//  BLEFramer.swift
-//  MacSMSGateway
-//
-//  Created by Papp Zoltán on 2026. 07. 17..
-//
-
 import Foundation
 
 class BLEFramer {
@@ -35,5 +28,21 @@ class BLEFramer {
         }
 
         return result
+    }
+
+    /// Kimenő üzenet felkészítése: soremelés (0x0A) hozzáfűzése és darabolás (chunking)
+    func frame(_ data: Data, maxChunkSize: Int = 180) -> [Data] {
+        var framedData = data
+        framedData.append(0x0A) // 0x0A (LF) lezáró bájt hozzáadása
+        
+        var chunks: [Data] = []
+        var offset = 0
+        while offset < framedData.count {
+            let chunkSize = min(maxChunkSize, framedData.count - offset)
+            let chunk = framedData.subdata(in: offset..<(offset + chunkSize))
+            chunks.append(chunk)
+            offset += chunkSize
+        }
+        return chunks
     }
 }
