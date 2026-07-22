@@ -187,53 +187,44 @@ public class BLEManager: NSObject, ObservableObject, CBCentralManagerDelegate, C
         let completedMessages = framer.append(data)
         for messageData in completedMessages {
             do {
-                if let msg = String(data: messageData, encoding: .utf8) {
-                    print(msg)
-                } else {
-                    print("Received non-UTF8 message data (\(messageData.count) bytes)")
+                let jsonObject = try JSONSerialization.jsonObject(with: messageData, options: [])
+                guard let dict = jsonObject as? [String: Any] else {
+                    print("Fallback: nem dictionary az üzenet gyökere")
+                    continue
                 }
-                let message = try BLECodec.decodeMessage(messageData)
-                handleIncomingMessage(message)
+                guard let action = dict["action"] as? String else {
+                    print("Fallback: hiányzik az action mező vagy nem String")
+                    print("Status: \(dict["status"] ?? "")")
+                    print("Error: \(dict["error"] ?? "")")
+                    continue
+                }
+                let type = dict["type"] as? String
+                var payloadData = Data()
+                if let payloadObject = dict["payload"] {
+                    if JSONSerialization.isValidJSONObject(payloadObject) {
+                        payloadData = try JSONSerialization.data(withJSONObject: payloadObject, options: [])
+                    } else if let payloadString = payloadObject as? String, let data = payloadString.data(using: .utf8) {
+                        payloadData = data
+                    } else {
+                        print("Fallback: payload nem konvertálható Data-vá")
+                        continue
+                    }
+                }
+                // Építsünk egy BLEMessage<Data>-t kézzel
+                let resolvedType: MessageType = {
+                    if let typeStr = type, let mt = MessageType(rawValue: typeStr) {
+                        return mt
+                    } else {
+                        // Ha a type hiányzik vagy ismeretlen, essen vissza egy alapértelmezett értékre
+                        return .response
+                    }
+                }()
+                let reconstructed = BLEMessage<Data>(type: resolvedType, action: action, payload: payloadData)
+                handleIncomingMessage(reconstructed)
             } catch {
-                // Fallback: ha a BLECodec a payload-ot Stringnek várja, de objektum érkezik, próbáljuk kézzel kinyerni
-                print("Hiba a dekódolás során: \(error). Fallback JSON feldolgozás...")
-                do {
-                    let jsonObject = try JSONSerialization.jsonObject(with: messageData, options: [])
-                    guard let dict = jsonObject as? [String: Any] else {
-                        print("Fallback: nem dictionary az üzenet gyökere")
-                        continue
-                    }
-                    guard let action = dict["action"] as? String else {
-                        print("Fallback: hiányzik az action mező vagy nem String")
-                        continue
-                    }
-                    let type = dict["type"] as? String
-                    var payloadData = Data()
-                    if let payloadObject = dict["payload"] {
-                        if JSONSerialization.isValidJSONObject(payloadObject) {
-                            payloadData = try JSONSerialization.data(withJSONObject: payloadObject, options: [])
-                        } else if let payloadString = payloadObject as? String, let data = payloadString.data(using: .utf8) {
-                            payloadData = data
-                        } else {
-                            print("Fallback: payload nem konvertálható Data-vá")
-                            continue
-                        }
-                    }
-                    // Építsünk egy BLEMessage<Data>-t kézzel
-                    let resolvedType: MessageType = {
-                        if let typeStr = type, let mt = MessageType(rawValue: typeStr) {
-                            return mt
-                        } else {
-                            // Ha a type hiányzik vagy ismeretlen, essen vissza egy alapértelmezett értékre
-                            return .response
-                        }
-                    }()
-                    let reconstructed = BLEMessage<Data>(type: resolvedType, action: action, payload: payloadData)
-                    handleIncomingMessage(reconstructed)
-                } catch {
-                    print("Fallback feldolgozás is hibázott: \(error)")
-                }
+                print("Fallback feldolgozás is hibázott: \(error)")
             }
+            
         }
     }
     
