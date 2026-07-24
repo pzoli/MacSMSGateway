@@ -5,6 +5,8 @@ import Combine
 public class BLEManager: NSObject, ObservableObject, CBCentralManagerDelegate, CBPeripheralDelegate {
     @Published public var isConnected = false
     @Published public var statusMessage = "Lecsatlakozva"
+
+    private var isUserInitiatedDisconnect = false
     
     // UI Adatmodellek
     @Published public var contacts: [Contact] = []
@@ -31,13 +33,21 @@ public class BLEManager: NSObject, ObservableObject, CBCentralManagerDelegate, C
     
     public func startScanning() {
         guard centralManager.state == .poweredOn else { return }
+        isUserInitiatedDisconnect = false
         statusMessage = "Keresés..."
         centralManager.scanForPeripherals(withServices: nil, options: [CBCentralManagerScanOptionAllowDuplicatesKey: false])
     }
-    public func disconnect() {
+    public func disconnect(manually: Bool = true) {
+        isUserInitiatedDisconnect = manually
+        centralManager.stopScan()
+        
         if let peripheral = peripheral {
             centralManager.cancelPeripheralConnection(peripheral)
+        } else {
+            isConnected = false
+            statusMessage = "Lecsatlakozva"
         }
+        
     }
     
     // MARK: - Parancsküldő Funkciók (Swing-client kompatibilis)
@@ -167,8 +177,12 @@ public class BLEManager: NSObject, ObservableObject, CBCentralManagerDelegate, C
     public func centralManager(_ central: CBCentralManager, didDisconnectPeripheral peripheral: CBPeripheral, error: Error?) {
         DispatchQueue.main.async {
             self.isConnected = false
-            self.statusMessage = "Lecsatlakozva. Újracsatlakozás..."
-            self.startScanning()
+            if self.isUserInitiatedDisconnect {
+                self.statusMessage = "Lecsatlakozva"
+            } else {
+                self.statusMessage = "Lecsatlakozva. Újracsatlakozás..."
+                self.startScanning()
+            }
         }
     }
     
@@ -271,7 +285,8 @@ public class BLEManager: NSObject, ObservableObject, CBCentralManagerDelegate, C
                 
             case "ERROR":
                 print("Error feedback: \(message.payload)")
-                
+            case "server_stopping":
+                self.disconnect(manually: false)
             default:
                 break
             }
