@@ -206,5 +206,10 @@ struct ContentView: View {
         } message: {
             Text(bleManager.errorMessage ?? "Ismeretlen hiba történt a letöltés során.")
         }
+        .alert("Beérkezett SMS", isPresented: $bleManager.isSmsReceived) {
+            Button("OK", role: .cancel) { }
+        } message: {
+            Text("SMS-ed érkezett...")
+        }
     }
 }

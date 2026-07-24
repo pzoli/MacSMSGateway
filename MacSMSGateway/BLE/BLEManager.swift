@@ -1,6 +1,7 @@
 import Foundation
 import CoreBluetooth
 import Combine
+import AppKit
 
 public class BLEManager: NSObject, ObservableObject, CBCentralManagerDelegate, CBPeripheralDelegate {
     @Published public var isConnected = false
@@ -8,6 +9,7 @@ public class BLEManager: NSObject, ObservableObject, CBCentralManagerDelegate, C
     @Published var isSyncing: Bool = false
     @Published var errorMessage: String? = nil
     @Published var showError: Bool = false
+    @Published var isSmsReceived: Bool = false
     
     private var isUserInitiatedDisconnect = false
     
@@ -87,7 +89,7 @@ public class BLEManager: NSObject, ObservableObject, CBCentralManagerDelegate, C
             print("Hiba a csomag kódolása/küldése során: \(error)")
         }
     }
-
+    
     // SMS küldése
     public func sendSMS(to number: String, body: String) {
         do {
@@ -99,7 +101,7 @@ public class BLEManager: NSObject, ObservableObject, CBCentralManagerDelegate, C
             print("Hiba a csomag kódolása/küldése során: \(error)")
         }
     }
-
+    
     // Hívás indítása/kezelése
     public func sendCallAction(action: CallAction, phoneNumber: String) {
         do {
@@ -328,6 +330,8 @@ public class BLEManager: NSObject, ObservableObject, CBCentralManagerDelegate, C
                 if var payload = try? JSONDecoder().decode(SmsReceivedPayload.self, from: message.payload) {
                     payload.name = self.contactName(for: payload.from)
                     self.incomingSmsList.insert(payload, at: 0)
+                    self.isSmsReceived = true
+                    self.playIncomingMessageSound()
                 }
                 
             case "STATUS":
@@ -342,4 +346,12 @@ public class BLEManager: NSObject, ObservableObject, CBCentralManagerDelegate, C
             }
         }
     }
+
+    func playIncomingMessageSound() {
+        // A macOS gyári "Glass" hangjának lejátszása:
+        if let sound = NSSound(named: "Glass") {
+            sound.play()
+        }
+    }
+
 }
