@@ -12,6 +12,8 @@ public class BLEManager: NSObject, ObservableObject, CBCentralManagerDelegate, C
     @Published public var currentCallNumber: String? = nil
     @Published public var incomingSmsList: [SmsReceivedPayload] = []
     
+    @Published public var keypass: String = ""
+    
     private var centralManager: CBCentralManager!
     private var peripheral: CBPeripheral?
     private var rxCharacteristic: CBCharacteristic?
@@ -20,7 +22,10 @@ public class BLEManager: NSObject, ObservableObject, CBCentralManagerDelegate, C
     private var framer = BLEFramer()
     
     override public init() {
+        self.keypass = ""
         super.init()
+        let generated = BLEManager.generateKeypass(length: 40)
+        self.keypass = generated
         centralManager = CBCentralManager(delegate: self, queue: nil)
     }
     
@@ -40,8 +45,8 @@ public class BLEManager: NSObject, ObservableObject, CBCentralManagerDelegate, C
     /// Kontaktok letöltésének kérése BLE-n keresztül
     public func requestSyncContacts() {
         do {
-            let rawMessage = BLEProtocol.makeSyncContactsMessage()
-            let bleMessage = BLEMessage<EmptyPayload>(type: rawMessage.type,action: rawMessage.action, payload: rawMessage.payload)
+            let rawMessage = BLEProtocol.makeSyncContactsMessage(keypass: self.keypass)
+            let bleMessage = BLEMessage<EmptyPayload>(type: rawMessage.type,action: rawMessage.action, payload: rawMessage.payload, keypass: rawMessage.keypass)
             let encodedData = try BLECodec.encode(bleMessage)
             send(data: encodedData)
         } catch {
@@ -52,8 +57,8 @@ public class BLEManager: NSObject, ObservableObject, CBCentralManagerDelegate, C
     // SMS küldése
     public func sendSMS(to number: String, body: String) {
         do {
-            let rawMessage = BLEProtocol.makeSendSmsMessage(to: number, message: body)
-            let bleMessage = BLEMessage<SendSmsPayload>(type: rawMessage.type, action: rawMessage.action, payload: rawMessage.payload)
+            let rawMessage = BLEProtocol.makeSendSmsMessage(to: number, message: body, keypass: self.keypass)
+            let bleMessage = BLEMessage<SendSmsPayload>(type: rawMessage.type, action: rawMessage.action, payload: rawMessage.payload, keypass: rawMessage.keypass)
             let encodedData = try BLECodec.encode(bleMessage)
             send(data: encodedData)
         } catch {
@@ -64,8 +69,8 @@ public class BLEManager: NSObject, ObservableObject, CBCentralManagerDelegate, C
     // Hívás indítása/kezelése
     public func sendCallAction(action: CallAction, phoneNumber: String) {
         do {
-            let rawMessage = BLEProtocol.makeDialCallMessage(phoneNumber: phoneNumber)
-            let bleMessage = BLEMessage<SendSmsPayload>(type: rawMessage.type,action: rawMessage.action, payload: rawMessage.payload)
+            let rawMessage = BLEProtocol.makeDialCallMessage(phoneNumber: phoneNumber, keypass: self.keypass)
+            let bleMessage = BLEMessage<SendSmsPayload>(type: rawMessage.type,action: rawMessage.action, payload: rawMessage.payload, keypass: rawMessage.keypass)
             let encodedData = try BLECodec.encode(bleMessage)
             send(data: encodedData)
         } catch {
@@ -76,8 +81,8 @@ public class BLEManager: NSObject, ObservableObject, CBCentralManagerDelegate, C
     /// Hívás kezdeményezése
     public func makeCall(to number: String) {
         do {
-            let rawMessage = BLEProtocol.makeDialCallMessage(phoneNumber: number)
-            let bleMessage = BLEMessage<SendSmsPayload>(type: rawMessage.type, action: rawMessage.action, payload: rawMessage.payload)
+            let rawMessage = BLEProtocol.makeDialCallMessage(phoneNumber: number, keypass: self.keypass)
+            let bleMessage = BLEMessage<SendSmsPayload>(type: rawMessage.type, action: rawMessage.action, payload: rawMessage.payload, keypass: rawMessage.keypass)
             let encodedData = try BLECodec.encode(bleMessage)
             send(data: encodedData)
         } catch {
@@ -88,8 +93,8 @@ public class BLEManager: NSObject, ObservableObject, CBCentralManagerDelegate, C
     /// Bejövő hívás fogadása
     public func answerCall() {
         do {
-            guard let rawMessage = BLEProtocol.makeCallControlMessage(action: .answer) else { return }
-            let bleMessage = BLEMessage<EmptyPayload>(type: rawMessage.type,action: rawMessage.action, payload: rawMessage.payload)
+            guard let rawMessage = BLEProtocol.makeCallControlMessage(action: .answer, keypass: self.keypass) else { return }
+            let bleMessage = BLEMessage<EmptyPayload>(type: rawMessage.type,action: rawMessage.action, payload: rawMessage.payload, keypass: rawMessage.keypass)
             let encodedData = try BLECodec.encode(bleMessage)
             send(data: encodedData)
         } catch {
@@ -100,8 +105,8 @@ public class BLEManager: NSObject, ObservableObject, CBCentralManagerDelegate, C
     /// Hívás elutasítása / Bontása
     public func rejectOrHangupCall() {
         do {
-            guard let rawMessage = BLEProtocol.makeCallControlMessage(action: .reject) else { return }
-            let bleMessage = BLEMessage<EmptyPayload>(type: rawMessage.type, action: rawMessage.action, payload: rawMessage.payload)
+            guard let rawMessage = BLEProtocol.makeCallControlMessage(action: .reject, keypass: self.keypass) else { return }
+            let bleMessage = BLEMessage<EmptyPayload>(type: rawMessage.type, action: rawMessage.action, payload: rawMessage.payload, keypass: rawMessage.keypass)
             let encodedData = try BLECodec.encode(bleMessage)
             send(data: encodedData)
         } catch {
@@ -119,10 +124,22 @@ public class BLEManager: NSObject, ObservableObject, CBCentralManagerDelegate, C
         }
     }
     
+    public static func generateKeypass(length: Int) -> String {
+        let charset = Array("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789")
+        var result = String()
+        result.reserveCapacity(length)
+        for _ in 0..<length {
+            if let random = charset.randomElement() {
+                result.append(random)
+            }
+        }
+        return result
+    }
+    
     // MARK: - CBCentralManagerDelegate
     public func centralManagerDidUpdateState(_ central: CBCentralManager) {
         if central.state == .poweredOn {
-            startScanning()
+            //startScanning()
         } else {
             statusMessage = "Bluetooth kikapcsolva"
         }
@@ -177,7 +194,7 @@ public class BLEManager: NSObject, ObservableObject, CBCentralManagerDelegate, C
         DispatchQueue.main.async {
             self.isConnected = true
             self.statusMessage = "Csatlakoztatva: \(peripheral.name ?? "Ezköz")"
-            self.requestSyncContacts()
+            //self.requestSyncContacts()
         }
     }
     
@@ -261,4 +278,3 @@ public class BLEManager: NSObject, ObservableObject, CBCentralManagerDelegate, C
         }
     }
 }
-

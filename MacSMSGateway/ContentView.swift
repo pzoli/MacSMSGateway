@@ -10,7 +10,7 @@ import SwiftUI
 struct ContentView: View {
     @StateObject private var bleManager = BLEManager()
     
-    @State private var selectedTab = 0
+    @State private var selectedTab = 3
     @State private var recipientNumber: String = ""
     @State private var smsBody: String = ""
 
@@ -18,6 +18,15 @@ struct ContentView: View {
         VStack(spacing: 0) {
             // Fejléc / Állapot
             HStack {
+                Button(bleManager.isConnected ? "Lecsatlakozás" : "Kapcsolódás") {
+                        if bleManager.isConnected {
+                            bleManager.disconnect()
+                        } else {
+                            bleManager.startScanning()
+                        }
+                    }
+                    .buttonStyle(.bordered)
+                    .padding(.leading, 8)
                 Circle()
                     .fill(bleManager.isConnected ? Color.green : Color.red)
                     .frame(width: 10, height: 10)
@@ -27,6 +36,7 @@ struct ContentView: View {
                 if bleManager.isConnected {
                     Button("Szinkronizálás") {
                         bleManager.requestSyncContacts()
+                        selectedTab = 0
                     }
                 }
             }
@@ -66,7 +76,6 @@ struct ContentView: View {
             TabView(selection: $selectedTab) {
                 // MARK: Kontaktok Tab
                 VStack {
-                    
                     List(bleManager.contacts, id: \.id) { contact in
                         HStack {
                             VStack(alignment: .leading) {
@@ -88,7 +97,6 @@ struct ContentView: View {
                             }
                         }
                     }
-                    
                 }
                 .tabItem {
                     Label("Kontaktok", systemImage: "person.crop.circle")
@@ -107,7 +115,6 @@ struct ContentView: View {
                     HStack {
                         Spacer()
                         Button("SMS Küldése") {
-                            // JAVÍTVA: sendSms helyett sendSMS (nagybetűs SMS)
                             bleManager.sendSMS(to: recipientNumber, body: smsBody)
                             smsBody = ""
                         }
@@ -139,10 +146,32 @@ struct ContentView: View {
                     Label("Bejövő SMS", systemImage: "tray")
                 }
                 .tag(2)
+
+                // MARK: Beállítások (Settings) Tab
+                VStack(spacing: 16) {
+                    Spacer()
+                    
+                    Button("Új jelszó generálása") {
+                        bleManager.keypass = BLEManager.generateKeypass(length: 40)
+                    }
+                    .buttonStyle(.borderedProminent)
+
+                    Text("Passkey: \(bleManager.keypass)")
+                        .font(.caption.monospaced())
+                        .foregroundColor(.secondary)
+
+                    QRCodeView(qrText: bleManager.keypass)
+                    
+                    Spacer()
+                }
+                .padding()
+                .tabItem {
+                    Label("Beállítások", systemImage: "gearshape")
+                }
+                .tag(3)
             }
             .padding(5)
         }
-        .frame(minWidth: 500, minHeight: 400)
+        .frame(minWidth: 500, minHeight: 450)
     }
 }
-

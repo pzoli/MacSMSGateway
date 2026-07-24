@@ -30,16 +30,19 @@ public struct BLEMessage<T: Codable>: Codable {
     public let payload: T
     public let status: Status?
     public let error: BLEError?
+    public let keypass: String?
 
     public init(id: Int64 = Int64(Date().timeIntervalSince1970 * 1000),
                 type: MessageType,
                 action: String,
-                payload: T) {
+                payload: T,
+                keypass: String? = nil) {
         self.id = id
         self.type = type
         self.action = action
         self.payload = payload
         self.status = nil
         self.error = nil
+        self.keypass = keypass
     }
 }
