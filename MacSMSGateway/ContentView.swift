@@ -9,31 +9,51 @@ import SwiftUI
 
 struct ContentView: View {
     @StateObject private var bleManager = BLEManager()
+
+    // 🎯 Fókusz állapot a saját keresőmezőnkhoz
+    @FocusState private var isSearchFocused: Bool
     
     @State private var selectedTab = 3
     @State private var recipientNumber: String = ""
     @State private var smsBody: String = ""
+    @State private var searchText = ""
+
+    // 💡 Számított tulajdonság a szűrt kontaktokhoz
+    var filteredContacts: [Contact] {
+        if searchText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            return bleManager.contacts
+        } else {
+            return bleManager.contacts.filter { contact in
+                contact.name.localizedCaseInsensitiveContains(searchText)
+            }
+        }
+    }
 
     var body: some View {
         VStack(spacing: 0) {
-            // Fejléc / Állapot
+            // MARK: Fejléc / Állapot
             HStack {
                 Button(bleManager.isConnected ? "Lecsatlakozás" : "Kapcsolódás") {
-                        if bleManager.isConnected {
-                            bleManager.disconnect()
-                            bleManager.isSyncing = false
-                        } else {
-                            bleManager.startScanning()
-                        }
+                    if bleManager.isConnected {
+                        bleManager.disconnect()
+                        bleManager.isSyncing = false
+                    } else {
+                        bleManager.startScanning()
                     }
-                    .buttonStyle(.bordered)
-                    .padding(.leading, 8)
+                }
+                .buttonStyle(.bordered)
+                .focusable(false) // Megakadályozza, hogy a billentyűzet véletlenül lenyomja
+                .padding(.leading, 8)
+                
                 Circle()
                     .fill(bleManager.isConnected ? Color.green : Color.red)
                     .frame(width: 10, height: 10)
+                
                 Text(bleManager.statusMessage)
                     .font(.subheadline)
+                
                 Spacer()
+                
                 if bleManager.isConnected {
                     if bleManager.isSyncing {
                         ProgressView()
@@ -55,7 +75,7 @@ struct ContentView: View {
             
             Divider()
 
-            // Aktív hívás banner (ha van folyamatban lévő hívás)
+            // MARK: Aktív hívás banner
             if bleManager.currentCallStatus != .idle {
                 HStack {
                     VStack(alignment: .leading) {
@@ -83,47 +103,83 @@ struct ContentView: View {
                 .background(Color.orange.opacity(0.2))
             }
 
-            // Tab Nézet
+            // MARK: Tab Nézet
             TabView(selection: $selectedTab) {
                 // MARK: Kontaktok Tab
-                VStack {
-                    List(bleManager.contacts, id: \.id) { contact in
+                NavigationStack {
+                    VStack(spacing: 0) {
+                        // 🔍 SAJÁT STABIL KERESŐMEZŐ
                         HStack {
-                            VStack(alignment: .leading) {
-                                Text(contact.name).font(.headline)
-                                
-                                if contact.numbers.isEmpty {
-                                    Text("Nincs megadott telefonszám")
-                                        .font(.caption)
-                                        .foregroundColor(.secondary)
-                                } else {
-                                    ForEach(contact.numbers, id: \.self) { number in
-                                        HStack {
-                                            Image(systemName: "phone")
-                                                .font(.caption)
-                                                .foregroundColor(.gray)
-                                            Text(number)
-                                                .font(.subheadline)
-                                                .foregroundColor(.gray)
-                                            Spacer()
-                                            Button(action: {
-                                                recipientNumber = number
-                                                bleManager.makeCall(to: number)
-                                            }) {
-                                                Image(systemName: "phone.fill")
-                                            }
-                                            Button(action: {
-                                                recipientNumber = number
-                                                selectedTab = 1
-                                            }) {
-                                                Image(systemName: "message.fill")
+                            Image(systemName: "magnifyingglass")
+                                .foregroundColor(.gray)
+                            
+                            TextField("Keresés név alapján...", text: $searchText)
+                                .textFieldStyle(.plain)
+                                .focused($isSearchFocused) // 👈 Ez a fókusz most már sziklaszilárd!
+                            
+                            if !searchText.isEmpty {
+                                Button(action: { searchText = "" }) {
+                                    Image(systemName: "xmark.circle.fill")
+                                        .foregroundColor(.gray)
+                                }
+                                .buttonStyle(.plain)
+                            }
+                        }
+                        .padding(8)
+                        .background(Color(NSColor.controlBackgroundColor))
+                        .cornerRadius(8)
+                        .padding([.horizontal, .top], 8)
+                        .padding(.bottom, 4)
+
+                        // Kontakt Lista
+                        List(filteredContacts, id: \.id) { contact in
+                            HStack {
+                                VStack(alignment: .leading) {
+                                    Text(contact.name).font(.headline)
+                                    
+                                    if contact.numbers.isEmpty {
+                                        Text("Nincs megadott telefonszám")
+                                            .font(.caption)
+                                            .foregroundColor(.secondary)
+                                    } else {
+                                        ForEach(contact.numbers, id: \.self) { number in
+                                            HStack {
+                                                Image(systemName: "phone")
+                                                    .font(.caption)
+                                                    .foregroundColor(.gray)
+                                                Text(number)
+                                                    .font(.subheadline)
+                                                    .foregroundColor(.gray)
+                                                Spacer()
+                                                Button(action: {
+                                                    recipientNumber = number
+                                                    bleManager.makeCall(to: number)
+                                                }) {
+                                                    Image(systemName: "phone.fill")
+                                                }
+                                                Button(action: {
+                                                    recipientNumber = number
+                                                    selectedTab = 1
+                                                }) {
+                                                    Image(systemName: "message.fill")
+                                                }
                                             }
                                         }
                                     }
                                 }
                             }
                         }
+                        .overlay {
+                            if !searchText.isEmpty && filteredContacts.isEmpty {
+                                ContentUnavailableView(
+                                    "Nincs találat",
+                                    systemImage: "person.slash",
+                                    description: Text("Nincs \"\(searchText)\" nevű kontakt a listában.")
+                                )
+                            }
+                        }
                     }
+                    .navigationTitle("Kontaktok")
                 }
                 .tabItem {
                     Label("Kontaktok", systemImage: "person.crop.circle")
@@ -201,6 +257,19 @@ struct ContentView: View {
             .padding(5)
         }
         .frame(minWidth: 500, minHeight: 450)
+        
+        // ⌨️ TISZTA ÉS MŰKÖDŐ CMD + F KEZELÉS:
+        .background(
+            Button("SearchShortcut") {
+                selectedTab = 0
+                // Egy apró késleltetéssel átadjuk a fókuszt a saját TextField-ünknek:
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
+                    isSearchFocused = true
+                }
+            }
+            .keyboardShortcut("f", modifiers: .command)
+            .hidden()
+        )
         .alert("Szinkronizálási hiba", isPresented: $bleManager.showError) {
             Button("OK", role: .cancel) { }
         } message: {
