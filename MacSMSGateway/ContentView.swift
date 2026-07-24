@@ -21,6 +21,7 @@ struct ContentView: View {
                 Button(bleManager.isConnected ? "Lecsatlakozás" : "Kapcsolódás") {
                         if bleManager.isConnected {
                             bleManager.disconnect()
+                            bleManager.isSyncing = false
                         } else {
                             bleManager.startScanning()
                         }
@@ -34,9 +35,18 @@ struct ContentView: View {
                     .font(.subheadline)
                 Spacer()
                 if bleManager.isConnected {
-                    Button("Szinkronizálás") {
-                        bleManager.requestSyncContacts()
-                        selectedTab = 0
+                    if bleManager.isSyncing {
+                        ProgressView()
+                            .controlSize(.small)
+                        
+                        Text("Szinkronizálás...")
+                            .font(.subheadline)
+                            .foregroundColor(.secondary)
+                    } else {
+                        Button("Szinkronizálás") {
+                            bleManager.requestSyncContacts()
+                            selectedTab = 0
+                        }
                     }
                 }
             }
@@ -151,6 +161,7 @@ struct ContentView: View {
                         VStack(alignment: .leading, spacing: 5) {
                             HStack {
                                 Text(sms.from).bold()
+                                Text(sms.name ?? "").bold()
                                 Spacer()
                                 Text(Date(), style: .time)
                                     .font(.caption).foregroundColor(.gray)
@@ -190,5 +201,10 @@ struct ContentView: View {
             .padding(5)
         }
         .frame(minWidth: 500, minHeight: 450)
+        .alert("Szinkronizálási hiba", isPresented: $bleManager.showError) {
+            Button("OK", role: .cancel) { }
+        } message: {
+            Text(bleManager.errorMessage ?? "Ismeretlen hiba történt a letöltés során.")
+        }
     }
 }

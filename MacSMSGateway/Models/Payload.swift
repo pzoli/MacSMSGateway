@@ -30,6 +30,7 @@ public struct SmsReceivedPayload: Codable, Payload {
     public var id: UUID = UUID()
     public let from: String
     public let text: String
+    public var name: String?
     enum CodingKeys: String, CodingKey {
         case from
         case text

@@ -5,7 +5,10 @@ import Combine
 public class BLEManager: NSObject, ObservableObject, CBCentralManagerDelegate, CBPeripheralDelegate {
     @Published public var isConnected = false
     @Published public var statusMessage = "Lecsatlakozva"
-
+    @Published var isSyncing: Bool = false
+    @Published var errorMessage: String? = nil
+    @Published var showError: Bool = false
+    
     private var isUserInitiatedDisconnect = false
     
     // UI Adatmodellek
@@ -72,6 +75,10 @@ public class BLEManager: NSObject, ObservableObject, CBCentralManagerDelegate, C
     /// Kontaktok letöltésének kérése BLE-n keresztül
     public func requestSyncContacts() {
         do {
+            DispatchQueue.main.async {
+                self.isSyncing = true
+                self.statusMessage = "Kontaktok letöltése..."
+            }
             let rawMessage = BLEProtocol.makeSyncContactsMessage(keypass: self.keypass)
             let bleMessage = BLEMessage<EmptyPayload>(type: rawMessage.type,action: rawMessage.action, payload: rawMessage.payload, keypass: rawMessage.keypass)
             let encodedData = try BLECodec.encode(bleMessage)
@@ -151,6 +158,15 @@ public class BLEManager: NSObject, ObservableObject, CBCentralManagerDelegate, C
         }
     }
     
+    func handleSyncError(_ message: String) {
+        DispatchQueue.main.async {
+            self.isSyncing = false
+            self.errorMessage = message
+            self.showError = true
+            self.statusMessage = "Kapcsolódva, de hiba történt a parancs küldésekor."
+        }
+    }
+    
     public static func generateKeypass(length: Int) -> String {
         let charset = Array("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789")
         var result = String()
@@ -194,6 +210,9 @@ public class BLEManager: NSObject, ObservableObject, CBCentralManagerDelegate, C
     public func centralManager(_ central: CBCentralManager, didDisconnectPeripheral peripheral: CBPeripheral, error: Error?) {
         DispatchQueue.main.async {
             self.isConnected = false
+            if self.isSyncing {
+                self.handleSyncError("A kapcsolat megszakadt a kontaktok letöltése közben.")
+            }
             if self.isUserInitiatedDisconnect {
                 self.statusMessage = "Lecsatlakozva"
             } else {
@@ -244,6 +263,15 @@ public class BLEManager: NSObject, ObservableObject, CBCentralManagerDelegate, C
                     print("Fallback: hiányzik az action mező vagy nem String")
                     print("Status: \(dict["status"] ?? "")")
                     print("Error: \(dict["error"] ?? "")")
+                    if dict["status"] as? String == "error" {
+                        let error = try JSONSerialization.data(withJSONObject: dict["error"] ?? "", options: [])
+                        let errorMessage = String(data:error,encoding: .utf8)
+                        if errorMessage?.contains("UNAUTHORIZED") == true {
+                            self.handleSyncError("Nem megfelelő jelszó")
+                        } else {
+                            self.handleSyncError(errorMessage?.isEmpty == true ? "Ismeretlen hiba" : errorMessage!)
+                        }
+                    }
                     continue
                 }
                 let type = dict["type"] as? String
@@ -284,6 +312,10 @@ public class BLEManager: NSObject, ObservableObject, CBCentralManagerDelegate, C
             case "contacts_list":
                 if let payload = try? JSONDecoder().decode(ContactListPayload.self, from: message.payload) {
                     self.contacts = payload.contacts
+                    DispatchQueue.main.async {
+                        self.isSyncing = false // 🏁 Szinkronizálás kész!
+                        self.statusMessage = "Kapcsolódva"
+                    }
                 }
                 
             case "make_call", "call_status":
@@ -293,7 +325,8 @@ public class BLEManager: NSObject, ObservableObject, CBCentralManagerDelegate, C
                 }
                 
             case "send_sms", "sms_received":
-                if let payload = try? JSONDecoder().decode(SmsReceivedPayload.self, from: message.payload) {
+                if var payload = try? JSONDecoder().decode(SmsReceivedPayload.self, from: message.payload) {
+                    payload.name = self.contactName(for: payload.from)
                     self.incomingSmsList.insert(payload, at: 0)
                 }
                 
