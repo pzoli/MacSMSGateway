@@ -80,20 +80,36 @@ struct ContentView: View {
                         HStack {
                             VStack(alignment: .leading) {
                                 Text(contact.name).font(.headline)
-                                Text(contact.numbers[0]).font(.subheadline).foregroundColor(.gray)
-                            }
-                            Spacer()
-                            Button(action: {
-                                recipientNumber = contact.numbers[0]
-                                bleManager.makeCall(to: contact.numbers[0])
-                            }) {
-                                Image(systemName: "phone.fill")
-                            }
-                            Button(action: {
-                                recipientNumber = contact.numbers[0]
-                                selectedTab = 1
-                            }) {
-                                Image(systemName: "message.fill")
+                                
+                                if contact.numbers.isEmpty {
+                                    Text("Nincs megadott telefonszám")
+                                        .font(.caption)
+                                        .foregroundColor(.secondary)
+                                } else {
+                                    ForEach(contact.numbers, id: \.self) { number in
+                                        HStack {
+                                            Image(systemName: "phone")
+                                                .font(.caption)
+                                                .foregroundColor(.gray)
+                                            Text(number)
+                                                .font(.subheadline)
+                                                .foregroundColor(.gray)
+                                            Spacer()
+                                            Button(action: {
+                                                recipientNumber = number
+                                                bleManager.makeCall(to: number)
+                                            }) {
+                                                Image(systemName: "phone.fill")
+                                            }
+                                            Button(action: {
+                                                recipientNumber = number
+                                                selectedTab = 1
+                                            }) {
+                                                Image(systemName: "message.fill")
+                                            }
+                                        }
+                                    }
+                                }
                             }
                         }
                     }
