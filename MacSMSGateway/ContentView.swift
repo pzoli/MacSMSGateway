@@ -53,6 +53,7 @@ struct ContentView: View {
                             .font(.caption).bold()
                         Text(bleManager.currentCallNumber ?? "Ismeretlen szám")
                             .font(.title3)
+                        Text(bleManager.contactName(for: bleManager.currentCallNumber ?? "") ?? "")
                     }
                     Spacer()
                     if bleManager.currentCallStatus == .ringing {

@@ -31,6 +31,23 @@ public class BLEManager: NSObject, ObservableObject, CBCentralManagerDelegate, C
         centralManager = CBCentralManager(delegate: self, queue: nil)
     }
     
+    func contactName(for rawNumber: String) -> String? {
+        // Tisztítjuk a bejövő számot a nem számjegy karakterektől a pontosabb egyezéshez
+        let cleanIncoming = rawNumber.components(separatedBy: CharacterSet.decimalDigits.inverted).joined()
+        guard !cleanIncoming.isEmpty else { return nil }
+        
+        for contact in self.contacts {
+            for number in contact.numbers {
+                let cleanNumber = number.components(separatedBy: CharacterSet.decimalDigits.inverted).joined()
+                // Ellenőrizzük, hogy egyeznek-e (vagy a vége egyezik-e, pl. +3670... vs 0670...)
+                if cleanNumber == cleanIncoming || cleanIncoming.hasSuffix(cleanNumber) || cleanNumber.hasSuffix(cleanIncoming) {
+                    return contact.name
+                }
+            }
+        }
+        return nil
+    }
+    
     public func startScanning() {
         guard centralManager.state == .poweredOn else { return }
         isUserInitiatedDisconnect = false
